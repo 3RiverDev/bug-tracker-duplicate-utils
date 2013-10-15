@@ -1,0 +1,17 @@
+apply plugin: 'eclipse'
+apply plugin: 'groovy'
+
+repositories {
+	maven {
+		url "https://maven.atlassian.com/public"
+	}
+	mavenCentral();
+}
+
+dependencies {
+	compile 'com.atlassian.jira:jira-rest-java-client:1.1-m02'
+}
+
+task wrapper(type: Wrapper) {
+	gradleVersion = '1.8'
+}
