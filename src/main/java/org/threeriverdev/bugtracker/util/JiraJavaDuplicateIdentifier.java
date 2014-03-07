@@ -16,13 +16,12 @@ import com.atlassian.jira.rest.client.domain.SearchResult;
 import com.atlassian.jira.rest.client.internal.jersey.JerseyJiraRestClientFactory;
 
 public class JiraJavaDuplicateIdentifier {
-
-	public static void main(String[] args) {
-
+	
+	public static void findDuplicates(String url, String project, String username, String password) {
 		final JerseyJiraRestClientFactory factory = new JerseyJiraRestClientFactory();
-		final URI jiraServerUri = URI.create( "https://hibernate.atlassian.net" );
+		final URI jiraServerUri = URI.create( url );
 		final JiraRestClient restClient = factory.createWithBasicHttpAuthentication(
-				jiraServerUri, "USERNAME", "PASSWORD" );
+				jiraServerUri, username, password );
 
 		Map<String, Set<String>> openExceptions = new HashMap<String, Set<String>>();
 		Map<String, Set<String>> allExceptions = new HashMap<String, Set<String>>();
@@ -32,8 +31,6 @@ public class JiraJavaDuplicateIdentifier {
 
 		// TODO: searchJqlWithFullIssues is not including comments. Find out how, since some stacktraces will be there.
 		// We can't call the issue client n+1 times to get them -- 8000+ issues takes a *long* time.
-		
-		// TODO: also include "caused by" lines, not just the top of the stack
 
 		System.out.println( "Indexing all issues..." );
 
@@ -41,7 +38,7 @@ public class JiraJavaDuplicateIdentifier {
 		int start = 0;
 		while ( true ) {
 			SearchResult searchResult = restClient.getSearchClient().searchJqlWithFullIssues(
-					"project = HHH", max, start, null );
+					"project = " + project, max, start, null );
 
 			System.out.println( start + " of " + searchResult.getTotal() );
 
@@ -57,13 +54,13 @@ public class JiraJavaDuplicateIdentifier {
 					// issue.comments.each { content += it }
 					Matcher matcher = stacktracePattern.matcher( content );
 					if ( matcher.find() ) {
-						buildExceptionList( matcher, allExceptions, key );
+						buildExceptionList( matcher, allExceptions, key, url );
 
 						String statusName = issue.getStatus().getName();
 						if ( statusName.equalsIgnoreCase( "Open" ) || statusName.equalsIgnoreCase( "In Progress" )
 								|| statusName.equalsIgnoreCase( "Reopened" )
 								|| statusName.equalsIgnoreCase( "Awaiting Test Case" ) ) {
-							buildExceptionList( matcher, openExceptions, key );
+							buildExceptionList( matcher, openExceptions, key, url );
 						}
 					}
 				}
@@ -84,30 +81,38 @@ public class JiraJavaDuplicateIdentifier {
 		}
 	}
 
-	private static void buildExceptionList(Matcher matcher, Map<String, Set<String>> exceptions, String key) {
+	private static void buildExceptionList(Matcher matcher, Map<String, Set<String>> exceptions, String key, String url) {
 		// Loop over each regex grouping (ie, each stacktrace).
 		while (matcher.find()) {
 			String stacktrace = matcher.group( 1 );
 			String[] stacktraceLines = stacktrace.split( "\\n" );
 			
 			// top of stack
-			addException( stacktraceLines[0], exceptions, key );
+			addException( stacktraceLines[0], exceptions, key, url );
 			
 			// "caused by:" lines
 			for (String stacktraceLine : stacktraceLines) {
 				if (stacktraceLine.contains( "Caused by:" )) {
-					addException( stacktraceLine, exceptions, key );
+					addException( stacktraceLine, exceptions, key, url );
 				}
 			}
 		}
 		matcher.reset();
 	}
 	
-	private static void addException(String exception, Map<String, Set<String>> exceptions, String key) {
+	private static void addException(String exception, Map<String, Set<String>> exceptions, String key, String url) {
 		exception = exception.trim();
 		if ( !exceptions.keySet().contains( exception ) ) {
 			exceptions.put( exception, new HashSet<String>() );
 		}
-		exceptions.get( exception ).add( "https://hibernate.atlassian.net/browse/" + key );
+		exceptions.get( exception ).add( url + "/browse/" + key );
+	}
+
+	public static void main(String[] args) {
+		JiraJavaDuplicateIdentifier.findDuplicates(
+				"https://hibernate.atlassian.net",
+				"HHH",
+				"USERNAME",
+				"PASSWORD" );
 	}
 }
